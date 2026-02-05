@@ -1,5 +1,7 @@
 package com.hmdp.service.impl;
 
+import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.hmdp.controller.ShopController;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.ShopType;
@@ -13,8 +15,10 @@ import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import static com.hmdp.utils.RedisConstants.CACHE_SHOP_TYPE_KEY;
+import static com.hmdp.utils.RedisConstants.CACHE_SHOP_TYPE_TTL;
 
 /**
  * <p>
@@ -29,35 +33,31 @@ public class ShopTypeServiceImpl extends ServiceImpl<ShopTypeMapper, ShopType> i
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
-    @Autowired
-    private ShopTyprController shopType;
 
     @Override
-    public Result queryList() {
-        //先从Redis中查，这里的常量值是固定前缀 + 店铺id
-        List<String> shopTypes =
-                stringRedisTemplate.opsForList().range(CACHE_SHOP_TYPE_KEY, 0, -1);
-        //如果不为空（查询到了），则转为ShopType类型直接返回
-        if (!shopTypes.isEmpty()) {
-            List<ShopType> tmp = new ArrayList<>();
-            for (String types : shopTypes) {
-                ShopType shopType = JSONUtil.toBean(types, ShopType.class);
-                tmp.add(shopType);
-            }
-            return Result.ok(tmp);
+    public Result queryTypeList() {
+        // 1.从 Redis 中查询商户类型缓存
+        String shopTypeJson = stringRedisTemplate.opsForValue().get(CACHE_SHOP_TYPE_KEY);
+
+        // 2.判断是否存在
+        if (StrUtil.isNotBlank(shopTypeJson)) {
+            // 3.存在，直接转为 List 返回
+            List<ShopType> typeList = JSONUtil.toList(shopTypeJson, ShopType.class);
+            return Result.ok(typeList);
         }
-        //否则去数据库中查
-        List<ShopType> tmp = query().orderByAsc("sort").list();
-        if (tmp == null){
-            return Result.fail("店铺类型不存在！！");
+
+        // 4.不存在，查询数据库
+        List<ShopType> typeList = query().orderByAsc("sort").list();
+
+        // 5.不存在，返回错误
+        if (typeList == null || typeList.isEmpty()) {
+            return Result.fail("店铺类型不存在");
         }
-        //查到了转为json字符串，存入redis
-        for (ShopType shopType : tmp) {
-            String jsonStr = JSONUtil.toJsonStr(shopType);
-            shopTypes.add(jsonStr);
-        }
-        stringRedisTemplate.opsForList().leftPushAll(CACHE_SHOP_TYPE_KEY,shopTypes);
-        //最终把查询到的商户分类信息返回给前端
-        return Result.ok(tmp);
+
+        // 6.存在，写入 Redis 缓存
+        stringRedisTemplate.opsForValue().set(CACHE_SHOP_TYPE_KEY, JSONUtil.toJsonStr(typeList),CACHE_SHOP_TYPE_TTL, TimeUnit.MINUTES);
+
+        // 7.返回
+        return Result.ok(typeList);
     }
 }

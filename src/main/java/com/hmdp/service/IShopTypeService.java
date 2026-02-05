@@ -13,5 +13,5 @@ import com.baomidou.mybatisplus.extension.service.IService;
  * @since 2021-12-22
  */
 public interface IShopTypeService extends IService<ShopType> {
-    Result queryList();
+    Result queryTypeList();
 }
