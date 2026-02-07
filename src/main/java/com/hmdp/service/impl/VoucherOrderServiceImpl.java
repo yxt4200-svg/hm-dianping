@@ -8,8 +8,10 @@ import com.hmdp.service.ISeckillVoucherService;
 import com.hmdp.service.IVoucherOrderService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.utils.RedisIdWorker;
+import com.hmdp.utils.SimpleRedisLock;
 import com.hmdp.utils.UserHolder;
 import org.springframework.aop.framework.AopContext;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +34,9 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
     @Resource
     private RedisIdWorker redisIdWorker;
+
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
 
     @Override
     public Result seckillVoucher(Long voucherId) {
@@ -64,11 +69,36 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         Long userId = UserHolder.getUser().getId();
         // 在方法外部加锁，保证事务提交才释放锁
         // intern()：将toString生成的新字符串入池（常量池），池中无则添加、有则复用，确保同userId对应唯一字符串对象
-        synchronized (userId.toString().intern()){
+
+//        synchronized (userId.toString().intern()){
+//            // 获取代理对象（）事务
+//            // 事务这个功能是代理对象提供的，直接this.方法是没有事务，所以要获取代理对象去调用方法
+//            IVoucherOrderService proxy = (IVoucherOrderService) AopContext.currentProxy();
+//            return proxy.createVoucherOrder(voucherId);
+//        }
+
+        /**
+         * 分布锁11：实现分布锁1
+         * 同一个用户才要锁的限制，锁的范围是用户，这里要拼接用户Id，一起作为锁的对象
+         */
+        SimpleRedisLock lock = new SimpleRedisLock("order:" + userId, stringRedisTemplate);
+        // 获取锁
+        boolean isLock = lock.tryLock(1200);
+        // 判断是否获取锁成功
+        if (!isLock){
+            // 获取锁失败，返回错误
+            return Result.fail("不允许重复下单");
+        }
+        // 获取锁成功可能有异常，要try
+        try {
             // 获取代理对象（）事务
-            // 事务这个功能是代理对象提供的，直接this.方法是没有事务，所以要获取代理对象去调用方法
             IVoucherOrderService proxy = (IVoucherOrderService) AopContext.currentProxy();
             return proxy.createVoucherOrder(voucherId);
+        } catch (IllegalStateException e) {
+            throw new RuntimeException(e);
+        } finally {
+            // 释放锁
+            lock.unlock();
         }
 
     }
