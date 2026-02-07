@@ -59,6 +59,11 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         boolean success = seckillVoucherService.update()
                 .setSql("stock = stock - 1")
                 .eq("voucher_id", voucherId)
+                /**
+                 * 秒杀06：解决超卖问题
+                 * 原本使用乐观锁，先查询，修改之前判断当前状态和查询状态是否一致，where stock = ?
+                 * 但是成功率太低了，高并发下只要库存被修改，其他请求就失效，所以只需判断stock>0，
+                 */
                 .gt("stock",0)
                 .update();
         if(!success){
@@ -68,7 +73,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
         // 6.创建订单
         VoucherOrder voucherOrder = new VoucherOrder();
-        
+
         // 6.1.订单id
         long orderId = redisIdWorker.nextId("order");
         voucherOrder.setId(orderId);
