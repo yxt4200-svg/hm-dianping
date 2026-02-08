@@ -87,6 +87,9 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
          * 同一个用户才要锁的限制，锁的范围是用户，这里要拼接用户Id，一起作为锁的对象
          */
         // SimpleRedisLock lock = new SimpleRedisLock("order:" + userId, stringRedisTemplate);
+        /**
+         * 分布式锁18：引入redisson分布式锁框架
+         */
         RLock lock = redissonClient.getLock("lock:order:" + userId);
         // 获取锁
         // boolean isLock = lock.tryLock(1200); // stringRedisTemplate版本
