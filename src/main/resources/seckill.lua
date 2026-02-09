@@ -3,13 +3,13 @@
 -- 从ARGV里取是因为它不是一个key,是个id,通过id拼接得到key
 local voucherId = ARGV[1]
 -- 1.2 用户id
-local userId = ARGV[1]
+local userId = ARGV[2]
 
 -- 2.数据库key
 -- 2.1 库key
-local stockKey = 'seckill:stock' .. voucherId
+local stockKey = 'seckill:stock:' .. voucherId
 -- 2.2 订单id
-local orderKey = 'seckill:stock' .. voucherId
+local orderKey = 'seckill:stock:' .. voucherId
 
 -- 3. 脚本业务
 -- 3.1 判断库存是否充足 get stockKey
