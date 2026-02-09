@@ -1,12 +1,22 @@
 package com.hmdp;
 
+import cn.hutool.core.lang.UUID;
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.bean.copier.CopyOptions;
+import cn.hutool.core.io.FileUtil;
 import cn.hutool.cron.timingwheel.SystemTimer;
 import com.hmdp.entity.Shop;
+import com.hmdp.entity.User;
+import com.hmdp.service.IUserService;
 import com.hmdp.service.impl.ShopServiceImpl;
 import com.hmdp.utils.CacheClient;
+import com.hmdp.utils.RedisConstants;
 import com.hmdp.utils.RedisIdWorker;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.redis.core.StringRedisTemplate;
+
+import java.util.*;
 
 import javax.annotation.Resource;
 
@@ -30,6 +40,12 @@ class HmDianPingApplicationTests {
     private RedisIdWorker redisIdWorker;
 
     private ExecutorService es = Executors.newFixedThreadPool(500);
+
+    @Resource
+    private IUserService iUserService;
+
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
 
     // 测试并发情况下生成id的性能和值的情况
     @Test
@@ -94,5 +110,56 @@ class HmDianPingApplicationTests {
         shopService.saveShop2Redis(1L,10L);
     }
 
+
+    /**
+     * 秒杀优化22：测试高并发1000个用户抢单
+     *
+     * 生成 1000 个模拟登录的 token，存到 Redis 里（让系统认为这些用户已登录），
+     * 再把 token 写到 txt 文件里，供 JMeter 测试高并发用
+     */
+    @Test
+    void createTokensForJMeter() {
+        // 1. 准备接收 Token 的文件路径 (直接写到 txt 里)
+        String filePath = "D:\\Develop\\hm-dianping\\jmeter\\tokens.txt";
+        // 清理旧文件
+        FileUtil.del(filePath);
+
+        // 2. 从数据库里拿前 1000 个用户
+        // 直接循环构造 user 数据存入 Redis
+        List<String> tokenList = new ArrayList<>();
+
+        for (int i = 1; i <= 1000; i++) {
+            // 模拟用户 ID
+            // 如果只是测抢单，Redis 里有 User 对象通常就够了
+            User user = new User();
+            user.setId((long) i);
+            user.setNickName("user_" + i);
+
+            // 3. 生成 Token
+            String token = UUID.randomUUID().toString(true);
+
+            // 4. 也就是 LoginInterceptor 需要的逻辑：把 User 转 Map 存 Redis
+            // 参考 UserServiceImpl 的 login 逻辑
+            String tokenKey = RedisConstants.LOGIN_USER_KEY + token;
+
+            Map<String, Object> userMap = BeanUtil.beanToMap(user, new HashMap<>(),
+                    CopyOptions.create()
+                            .setIgnoreNullValue(true)
+                            .setFieldValueEditor((fieldName, fieldValue) ->
+                                    fieldValue == null ? null : fieldValue.toString()));
+
+            // 存入 Redis (模拟登录状态)
+            stringRedisTemplate.opsForHash().putAll(tokenKey, userMap);
+            stringRedisTemplate.expire(tokenKey, RedisConstants.LOGIN_USER_TTL, TimeUnit.MINUTES);
+
+            // 5. 收集 Token
+            tokenList.add(token);
+        }
+
+        // 6. 写出到文件 (一行一个)
+        FileUtil.writeUtf8Lines(tokenList, filePath);
+
+        System.out.println("1000个token已生成，文件路径：" + filePath);
+    }
 
 }
