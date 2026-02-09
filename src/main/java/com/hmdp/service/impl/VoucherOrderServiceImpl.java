@@ -48,9 +48,33 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
     private static final DefaultRedisScript<Long> SECKILL_SCRIPT;
 
-    static {
+/*    static {
         SECKILL_SCRIPT = new DefaultRedisScript<>();
         SECKILL_SCRIPT.setLocation(new ClassPathResource("seckill.lua"));
+        SECKILL_SCRIPT.setResultType(Long.class);
+    }*/
+
+    static {
+        SECKILL_SCRIPT = new DefaultRedisScript<>();
+        // 直接把 Lua 代码写在这里，避开文件读取的所有坑
+        SECKILL_SCRIPT.setScriptText(
+                "local voucherId = ARGV[1]\n" +
+                        "local userId = ARGV[2]\n" +
+                        "local stockKey = 'seckill:stock:' .. voucherId\n" +
+                        "local orderKey = 'seckill:order:' .. voucherId\n" +
+                        "\n" +
+                        "if (tonumber(redis.call('get', stockKey)) <= 0) then\n" +
+                        "    return 1\n" +
+                        "end\n" +
+                        "\n" +
+                        "if (redis.call('sismember', orderKey, userId) == 1) then\n" +
+                        "    return 2\n" +
+                        "end\n" +
+                        "\n" +
+                        "redis.call('incrby', stockKey, -1)\n" +
+                        "redis.call('sadd', orderKey, userId)\n" +
+                        "return 0"
+        );
         SECKILL_SCRIPT.setResultType(Long.class);
     }
 
