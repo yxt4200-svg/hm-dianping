@@ -143,7 +143,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     private IVoucherOrderService proxy;
 
     /**
-     * 秒杀优化23：基于 lua 脚本判断库存是否充足以及用户是否下过订单
+     * 秒杀优化23：基于 lua 脚本判断库存是否充足以及用户是否下过订单（主线程）
      */
     @Override
     public Result seckillVoucher(Long voucherId) {
@@ -186,7 +186,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         proxy = (IVoucherOrderService) AopContext.currentProxy();
 
         // 3.返回订单id
-        return Result.ok(0);
+        return Result.ok(orderId);
 
     }
 
@@ -263,7 +263,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
 
     /**
-     * 秒杀优化24：基于阻塞队列实现异步秒杀
+     * 秒杀优化24：基于阻塞队列实现异步秒杀（子线程）
      */
     @Transactional
     // public Result createVoucherOrder(VoucherOrder voucherOrder)
@@ -298,6 +298,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
                  */
                 .gt("stock",0)
                 .update();
+
         if(!success){
             // 扣减失败
             log.error("库存不足");
