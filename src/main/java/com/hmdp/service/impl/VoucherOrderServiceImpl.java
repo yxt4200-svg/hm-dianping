@@ -87,7 +87,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
                         "\n" +
                         "redis.call('incrby', stockKey, -1)\n" +
                         "redis.call('sadd', orderKey, userId)\n" +
-                        "redis.call('xadd', 'stream.order', '*' , 'userId' ,userId, 'voucherId' ,voucherId, 'id', orderId)\n" +
+                        "redis.call('xadd', 'stream.orders', '*' , 'userId' ,userId, 'voucherId' ,voucherId, 'id', orderId)\n" +
                         "return 0"
         );
         SECKILL_SCRIPT.setResultType(Long.class);
